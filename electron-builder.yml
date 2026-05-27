@@ -1,0 +1,21 @@
+# electron-builder.yml
+appId: com.desk-pet.app
+productName: 桌面猫咪
+directories:
+  output: dist
+files:
+  - electron/**/*
+  - src/**/*
+  - assets/**/*
+  - data/**/*
+win:
+  target:
+    - nsis
+  icon: assets/icons/icon.ico
+mac:
+  target:
+    - dmg
+  icon: assets/icons/icon.icns
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
