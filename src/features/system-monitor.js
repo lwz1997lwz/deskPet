@@ -6,6 +6,7 @@ class SystemMonitor {
     this.memoryUsage = 0;
     this.updateInterval = null;
     this.callbacks = [];
+    this.lastCpuTimes = null; // 保存上一次 CPU 快照，用于计算真实使用率
   }
 
   start(interval = 2000) {
@@ -38,7 +39,19 @@ class SystemMonitor {
       totalIdle += cpu.times.idle;
     });
 
-    return Math.round((1 - totalIdle / totalTick) * 100);
+    // 如果有上一次快照，计算差值
+    if (this.lastCpuTimes) {
+      const deltaIdle = totalIdle - this.lastCpuTimes.idle;
+      const deltaTotal = totalTick - this.lastCpuTimes.total;
+      this.lastCpuTimes = { idle: totalIdle, total: totalTick };
+      // 防止除零
+      if (deltaTotal === 0) return 0;
+      return Math.round((1 - deltaIdle / deltaTotal) * 100);
+    }
+
+    // 第一次调用，保存快照并返回 0
+    this.lastCpuTimes = { idle: totalIdle, total: totalTick };
+    return 0;
   }
 
   getMemoryUsage() {
@@ -51,12 +64,25 @@ class SystemMonitor {
     this.callbacks.push(callback);
   }
 
+  offUpdate(callback) {
+    const index = this.callbacks.indexOf(callback);
+    if (index !== -1) {
+      this.callbacks.splice(index, 1);
+    }
+  }
+
   notify() {
     const data = {
       cpu: this.cpuUsage,
       memory: this.memoryUsage
     };
-    this.callbacks.forEach(cb => cb(data));
+    this.callbacks.forEach(cb => {
+      try {
+        cb(data);
+      } catch (err) {
+        console.error('SystemMonitor 回调执行失败:', err);
+      }
+    });
   }
 
   getStatus() {
