@@ -144,6 +144,13 @@ function gameLoop(timestamp) {
     spriteAnimator.update(deltaTime);
     canvasManager.render();
 
+    // 待办提醒定时检查
+    lastTodoCheckTime += deltaTime;
+    if (lastTodoCheckTime >= TODO_CHECK_INTERVAL) {
+      lastTodoCheckTime = 0;
+      checkTodoReminders();
+    }
+
     frameCount++;
 
     requestAnimationFrame(gameLoop);
@@ -273,6 +280,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (Math.abs(x - catSprite.x) < 50 && Math.abs(y - catSprite.y) < 50) {
     isDragging = true;
     dragMoved = false;
+    catSprite.setState('drag'); // 切换到拖拽精灵图
     lastMouseX = e.screenX;
     lastMouseY = e.screenY;
   }
@@ -303,9 +311,15 @@ canvas.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('mouseup', () => {
+  if (isDragging) {
+    catSprite.setState('idle');
+  }
   isDragging = false;
 });
 window.addEventListener('mouseup', () => {
+  if (isDragging) {
+    catSprite.setState('idle');
+  }
   isDragging = false;
 });
 
@@ -401,6 +415,32 @@ canvas.addEventListener('contextmenu', (e) => {
     }
   ]);
 });
+
+// 待办提醒：每 30 秒检查一次即将到期的待办
+let lastTodoCheckTime = 0;
+const TODO_CHECK_INTERVAL = 30000; // 30 秒
+const notifiedTodoIds = new Set(); // 避免重复提醒
+
+function checkTodoReminders() {
+  const dueSoon = todoManager.getDueSoon(5); // 5 分钟内到期
+  for (const todo of dueSoon) {
+    if (!notifiedTodoIds.has(todo.id)) {
+      notifiedTodoIds.add(todo.id);
+      const timeStr = todo.reminderTime ? new Date(todo.reminderTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '';
+      bubble.show('📋 待办提醒：' + todo.content + (timeStr ? ' (' + timeStr + ')' : ''), catSprite.x, catSprite.y - 70);
+      // 如果猫咪在睡觉，唤醒它来提醒
+      if (catSprite.state === 'sleep') {
+        catSprite.setState('idle');
+      }
+    }
+  }
+  // 清理已完成或已删除的 todo id
+  for (const id of notifiedTodoIds) {
+    if (!todoManager.todos.find(t => t.id === id && !t.completed)) {
+      notifiedTodoIds.delete(id);
+    }
+  }
+}
 
 console.log('桌面猫咪已启动！');
 console.log('猫咪位置:', catSprite.x, catSprite.y);
