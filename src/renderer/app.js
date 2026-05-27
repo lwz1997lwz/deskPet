@@ -10,6 +10,7 @@ const TodoManager = require('../features/todo');
 const SystemMonitor = require('../features/system-monitor');
 const Bubble = require('../ui/bubble');
 const ContextMenu = require('../ui/menu');
+const Settings = require('../ui/settings');
 
 // 初始化画布
 const canvas = document.getElementById('catCanvas');
@@ -41,6 +42,7 @@ const todoManager = new TodoManager(path.join(dataDir, 'todos.json'));
 const systemMonitor = new SystemMonitor();
 const bubble = new Bubble();
 const contextMenu = new ContextMenu();
+const settings = new Settings();
 
 // 精灵图动画系统
 const spriteAnimator = {
@@ -85,8 +87,18 @@ const spriteAnimator = {
     console.log('精灵图加载完成:', Object.keys(this.frames).map(k => `${k}:${this.frames[k].length}帧`).join(', '));
   },
 
+  // 上一次的状态，用于检测状态切换
+  lastState: null,
+
   // 更新动画帧
   update(deltaTime) {
+    // 状态切换时重置帧索引
+    if (this.lastState !== catSprite.state) {
+      this.currentFrame = 0;
+      this.frameTimer = 0;
+      this.lastState = catSprite.state;
+    }
+
     this.frameTimer += deltaTime;
     if (this.frameTimer >= this.frameInterval) {
       this.frameTimer = 0;
@@ -193,7 +205,24 @@ catSprite.stateMachine.addState('walk', {
 });
 
 catSprite.stateMachine.addState('sleep', {
-  onEnter: () => catBehaviors.sleep(),
+  onEnter: () => {
+    catBehaviors.sleep();
+    // 自动唤醒：15~30秒后自动回到 idle
+    const wakeDelay = 15000 + Math.random() * 15000;
+    catSprite._sleepTimer = setTimeout(() => {
+      if (catSprite.state === 'sleep') {
+        catSprite.setState('idle');
+        bubble.show('伸个懒腰~', catSprite.x, catSprite.y - 70);
+      }
+    }, wakeDelay);
+  },
+  onExit: () => {
+    // 清除自动唤醒定时器
+    if (catSprite._sleepTimer) {
+      clearTimeout(catSprite._sleepTimer);
+      catSprite._sleepTimer = null;
+    }
+  },
   onUpdate: (dt) => {}
 });
 
@@ -293,15 +322,22 @@ canvas.addEventListener('click', (e) => {
 
   // 检测是否点击到猫咪
   if (Math.abs(x - catSprite.x) < 50 && Math.abs(y - catSprite.y) < 50) {
-    catSprite.setState('interact');
-    const messages = ['喵~', '呼噜噜~', '摸摸头~', '开心！', '再摸摸！'];
-    const msg = messages[Math.floor(Math.random() * messages.length)];
-    bubble.show(msg, catSprite.x, catSprite.y - 70);
-
-    // 2秒后回到空闲状态
-    setTimeout(() => {
+    // 睡觉时点击唤醒
+    if (catSprite.state === 'sleep') {
       catSprite.setState('idle');
-    }, 2000);
+      bubble.show('喵？被吵醒了...', catSprite.x, catSprite.y - 70);
+    } else {
+      catSprite.setState('interact');
+      const messages = ['喵~', '呼噜噜~', '摸摸头~', '开心！', '再摸摸！'];
+      const msg = messages[Math.floor(Math.random() * messages.length)];
+      bubble.show(msg, catSprite.x, catSprite.y - 70);
+      // 2秒后回到空闲状态
+      setTimeout(() => {
+        if (catSprite.state === 'interact') {
+          catSprite.setState('idle');
+        }
+      }, 2000);
+    }
   }
 });
 
@@ -352,6 +388,12 @@ canvas.addEventListener('contextmenu', (e) => {
       }
     },
     {
+      label: '设置',
+      action: () => {
+        settings.open();
+      }
+    },
+    {
       label: '退出',
       action: () => {
         ipcRenderer.send('app-quit');
@@ -363,3 +405,12 @@ canvas.addEventListener('contextmenu', (e) => {
 console.log('桌面猫咪已启动！');
 console.log('猫咪位置:', catSprite.x, catSprite.y);
 console.log('猫咪状态:', catSprite.state);
+
+// 监听托盘的「添加待办」事件
+ipcRenderer.on('show-todo-input', () => {
+  const content = prompt('请输入待办事项：');
+  if (content) {
+    todoManager.add(content);
+    bubble.show('已添加待办：' + content, catSprite.x, catSprite.y - 70);
+  }
+});
