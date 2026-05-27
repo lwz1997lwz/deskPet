@@ -1,4 +1,6 @@
 const path = require('path');
+const fs = require('fs');
+const { ipcRenderer } = require('electron');
 const CanvasManager = require('../engine/canvas');
 const AnimationEngine = require('../engine/animation');
 const CollisionSystem = require('../engine/collision');
@@ -13,12 +15,17 @@ const ContextMenu = require('../ui/menu');
 const canvas = document.getElementById('catCanvas');
 const ctx = canvas.getContext('2d');
 
+console.log('Canvas 元素:', canvas);
+console.log('Canvas 尺寸:', canvas.width, canvas.height);
+
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  console.log('Canvas 已调整大小:', canvas.width, canvas.height);
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+
 
 // 初始化各系统
 const canvasManager = new CanvasManager(canvas);
@@ -26,111 +33,147 @@ const collisionSystem = new CollisionSystem(canvas.width, canvas.height);
 const catSprite = new CatSprite(canvas.width / 2, canvas.height - 100);
 const catBehaviors = new CatBehaviors(catSprite, collisionSystem);
 const animationEngine = new AnimationEngine();
-const todoManager = new TodoManager(path.join(__dirname, '../../data/todos.json'));
+const dataDir = path.join(__dirname, '../../data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+const todoManager = new TodoManager(path.join(dataDir, 'todos.json'));
 const systemMonitor = new SystemMonitor();
 const bubble = new Bubble();
 const contextMenu = new ContextMenu();
+
+// 精灵图动画系统
+const spriteAnimator = {
+  frames: {},
+  currentFrame: 0,
+  frameTimer: 0,
+  frameInterval: 200, // 每帧 200ms
+
+  // 加载精灵图
+  async loadSprites() {
+    const states = ['idle', 'walk', 'sleep', 'interact', 'drag'];
+    const basePath = path.join(__dirname, '../../assets/cats/default');
+
+    for (const state of states) {
+      this.frames[state] = [];
+      const statePath = path.join(basePath, state);
+
+      const files = fs.readdirSync(statePath)
+        .filter(f => f.endsWith('.png'))
+        .sort();
+
+      for (const file of files) {
+        const filePath = path.join(statePath, file);
+        const fileUrl = 'file:///' + filePath.replace(/\\/g, '/');
+        const img = new Image();
+        img.src = fileUrl;
+        await new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+
+        // 将图片转为 canvas 以确保 drawImage 可用
+        const offscreen = document.createElement('canvas');
+        offscreen.width = img.width;
+        offscreen.height = img.height;
+        const offCtx = offscreen.getContext('2d');
+        offCtx.drawImage(img, 0, 0);
+        this.frames[state].push(offscreen);
+      }
+    }
+
+    console.log('精灵图加载完成:', Object.keys(this.frames).map(k => `${k}:${this.frames[k].length}帧`).join(', '));
+  },
+
+  // 更新动画帧
+  update(deltaTime) {
+    this.frameTimer += deltaTime;
+    if (this.frameTimer >= this.frameInterval) {
+      this.frameTimer = 0;
+      const stateFrames = this.frames[catSprite.state];
+      if (stateFrames && stateFrames.length > 0) {
+        this.currentFrame = (this.currentFrame + 1) % stateFrames.length;
+      }
+    }
+  },
+
+  // 获取当前帧
+  getCurrentFrame() {
+    const stateFrames = this.frames[catSprite.state];
+    if (stateFrames && stateFrames.length > 0) {
+      return stateFrames[this.currentFrame];
+    }
+    return null;
+  }
+};
+
+// 游戏循环
+let lastTime = 0;
+let isFirstFrame = true;
+let frameCount = 0;
+
+function gameLoop(timestamp) {
+  try {
+    if (isFirstFrame) {
+      lastTime = timestamp;
+      isFirstFrame = false;
+      console.log('游戏循环已启动');
+    }
+
+    const deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+
+    // 更新碰撞系统边界（窗口可能已调整大小）
+    collisionSystem.width = canvas.width;
+    collisionSystem.height = canvas.height;
+
+    catSprite.update(deltaTime);
+    animationEngine.update(deltaTime);
+    spriteAnimator.update(deltaTime);
+    canvasManager.render();
+
+    frameCount++;
+
+    requestAnimationFrame(gameLoop);
+  } catch (error) {
+    console.error('游戏循环错误:', error);
+  }
+}
+
+// 加载精灵图，然后启动游戏循环
+spriteAnimator.loadSprites().then(() => {
+  console.log('精灵图已就绪，启动游戏循环');
+  // 启动游戏循环
+  requestAnimationFrame(gameLoop);
+}).catch(err => {
+  console.error('精灵图加载失败:', err);
+  // 即使加载失败也启动游戏循环
+  requestAnimationFrame(gameLoop);
+});
 
 // 添加猫咪渲染层
 const catLayer = canvasManager.addLayer('cat');
 catLayer.elements.push({
   render: function(ctx) {
-    // 临时绘制方案：在没有图片素材时用 Canvas 基本图形绘制猫咪
-    ctx.save();
+    const frame = spriteAnimator.getCurrentFrame();
+    if (frame && frame.width && frame.height) {
+      ctx.save();
 
-    // 绘制猫咪身体（椭圆）
-    ctx.fillStyle = '#FF9800';
-    ctx.beginPath();
-    ctx.ellipse(catSprite.x, catSprite.y, 30, 25, 0, 0, Math.PI * 2);
-    ctx.fill();
+      // 根据方向翻转图片
+      if (catSprite.direction === -1) {
+        ctx.translate(catSprite.x, catSprite.y);
+        ctx.scale(-1, 1);
+        ctx.drawImage(frame, -frame.width / 2, -frame.height / 2);
+      } else {
+        ctx.drawImage(frame, catSprite.x - frame.width / 2, catSprite.y - frame.height / 2);
+      }
 
-    // 绘制猫咪头部（圆形）
-    ctx.fillStyle = '#FF9800';
-    ctx.beginPath();
-    ctx.arc(catSprite.x, catSprite.y - 25, 20, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 绘制左耳
-    ctx.fillStyle = '#FF9800';
-    ctx.beginPath();
-    ctx.moveTo(catSprite.x - 18, catSprite.y - 35);
-    ctx.lineTo(catSprite.x - 10, catSprite.y - 55);
-    ctx.lineTo(catSprite.x - 2, catSprite.y - 35);
-    ctx.fill();
-
-    // 绘制右耳
-    ctx.beginPath();
-    ctx.moveTo(catSprite.x + 2, catSprite.y - 35);
-    ctx.lineTo(catSprite.x + 10, catSprite.y - 55);
-    ctx.lineTo(catSprite.x + 18, catSprite.y - 35);
-    ctx.fill();
-
-    // 绘制耳朵内侧
-    ctx.fillStyle = '#FFB74D';
-    ctx.beginPath();
-    ctx.moveTo(catSprite.x - 15, catSprite.y - 37);
-    ctx.lineTo(catSprite.x - 10, catSprite.y - 50);
-    ctx.lineTo(catSprite.x - 5, catSprite.y - 37);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(catSprite.x + 5, catSprite.y - 37);
-    ctx.lineTo(catSprite.x + 10, catSprite.y - 50);
-    ctx.lineTo(catSprite.x + 15, catSprite.y - 37);
-    ctx.fill();
-
-    // 绘制眼睛
-    ctx.fillStyle = '#333';
-    ctx.beginPath();
-    ctx.arc(catSprite.x - 8, catSprite.y - 28, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(catSprite.x + 8, catSprite.y - 28, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 绘制鼻子
-    ctx.fillStyle = '#FF5722';
-    ctx.beginPath();
-    ctx.arc(catSprite.x, catSprite.y - 22, 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 绘制嘴巴
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(catSprite.x - 3, catSprite.y - 19, 3, 0, Math.PI);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(catSprite.x + 3, catSprite.y - 19, 3, 0, Math.PI);
-    ctx.stroke();
-
-    // 绘制尾巴
-    ctx.strokeStyle = '#FF9800';
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(catSprite.x + 25, catSprite.y + 5);
-    const tailWag = Math.sin(Date.now() / 200) * 10;
-    ctx.quadraticCurveTo(catSprite.x + 45, catSprite.y - 10 + tailWag, catSprite.x + 50, catSprite.y - 25 + tailWag);
-    ctx.stroke();
-
-    // 根据状态显示不同效果
-    if (catSprite.state === 'sleep') {
-      // 睡眠时绘制闭眼
-      ctx.fillStyle = '#FF9800';
-      ctx.fillRect(catSprite.x - 11, catSprite.y - 29, 7, 2);
-      ctx.fillRect(catSprite.x + 5, catSprite.y - 29, 7, 2);
-
-      // 绘制 "zzz"
-      ctx.fillStyle = '#666';
-      ctx.font = '12px sans-serif';
-      ctx.fillText('z', catSprite.x + 20, catSprite.y - 45);
-      ctx.font = '10px sans-serif';
-      ctx.fillText('z', catSprite.x + 28, catSprite.y - 52);
-      ctx.font = '8px sans-serif';
-      ctx.fillText('z', catSprite.x + 34, catSprite.y - 57);
+      ctx.restore();
+    } else {
+      // 如果没有帧，绘制一个调试矩形
+      ctx.fillStyle = 'red';
+      ctx.fillRect(catSprite.x - 20, catSprite.y - 20, 40, 40);
     }
-
-    ctx.restore();
   }
 });
 
@@ -186,34 +229,64 @@ systemMonitor.onUpdate((data) => {
 
 systemMonitor.start();
 
-// 游戏循环
-let lastTime = 0;
-let isFirstFrame = true;
+// 窗口拖拽状态
+let isDragging = false;
+let dragMoved = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
 
-function gameLoop(timestamp) {
-  if (isFirstFrame) {
-    lastTime = timestamp;
-    isFirstFrame = false;
+canvas.addEventListener('mousedown', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // 在猫咪区域按下时开始拖拽
+  if (Math.abs(x - catSprite.x) < 50 && Math.abs(y - catSprite.y) < 50) {
+    isDragging = true;
+    dragMoved = false;
+    lastMouseX = e.screenX;
+    lastMouseY = e.screenY;
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    const deltaX = e.screenX - lastMouseX;
+    const deltaY = e.screenY - lastMouseY;
+    if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+      dragMoved = true;
+    }
+    lastMouseX = e.screenX;
+    lastMouseY = e.screenY;
+    ipcRenderer.send('window-move', { deltaX, deltaY });
+  } else {
+    // 非拖拽时，猫咪跟随鼠标轻微移动视线
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const dx = mouseX - catSprite.x;
+    const dy = mouseY - catSprite.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance < 200) {
+      catSprite.direction = dx > 0 ? 1 : -1;
+    }
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  isDragging = false;
+});
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+});
+
+// 鼠标点击交互（非拖拽时触发）
+canvas.addEventListener('click', (e) => {
+  if (dragMoved) {
+    dragMoved = false;
+    return;
   }
 
-  const deltaTime = timestamp - lastTime;
-  lastTime = timestamp;
-
-  // 更新碰撞系统边界（窗口可能已调整大小）
-  collisionSystem.width = canvas.width;
-  collisionSystem.height = canvas.height;
-
-  catSprite.update(deltaTime);
-  animationEngine.update(deltaTime);
-  canvasManager.render();
-
-  requestAnimationFrame(gameLoop);
-}
-
-requestAnimationFrame(gameLoop);
-
-// 鼠标点击交互
-canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
@@ -277,25 +350,16 @@ canvas.addEventListener('contextmenu', (e) => {
       action: () => {
         catSprite.setState('walk');
       }
+    },
+    {
+      label: '退出',
+      action: () => {
+        ipcRenderer.send('app-quit');
+      }
     }
   ]);
 });
 
-// 鼠标移动 - 猫咪跟随鼠标轻微移动视线
-canvas.addEventListener('mousemove', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-  const mouseY = e.clientY - rect.top;
-
-  // 计算鼠标与猫咪的距离
-  const dx = mouseX - catSprite.x;
-  const dy = mouseY - catSprite.y;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-
-  // 如果鼠标在猫咪附近，更新朝向
-  if (distance < 200) {
-    catSprite.direction = dx > 0 ? 1 : -1;
-  }
-});
-
 console.log('桌面猫咪已启动！');
+console.log('猫咪位置:', catSprite.x, catSprite.y);
+console.log('猫咪状态:', catSprite.state);

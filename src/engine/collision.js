@@ -6,10 +6,10 @@ class CollisionSystem {
 
   checkBoundary(entity) {
     return (
-      entity.x <= 0 ||
-      entity.y <= 0 ||
-      entity.x + entity.width >= this.width ||
-      entity.y + entity.height >= this.height
+      entity.x < 0 ||
+      entity.y < 0 ||
+      entity.x + entity.width > this.width ||
+      entity.y + entity.height > this.height
     );
   }
 
