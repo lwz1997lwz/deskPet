@@ -1,0 +1,31 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+#catCanvas {
+  width: 100vw;
+  height: 100vh;
+}
+
+#bubble {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+#bubble.hidden {
+  opacity: 0;
+}

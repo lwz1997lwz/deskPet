@@ -1,0 +1,15 @@
+{
+  "name": "desk-pet",
+  "version": "1.0.0",
+  "description": "桌面宠物程序",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}
