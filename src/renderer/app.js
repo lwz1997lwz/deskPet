@@ -2,7 +2,6 @@ const path = require('path');
 const CanvasManager = require('../engine/canvas');
 const AnimationEngine = require('../engine/animation');
 const CollisionSystem = require('../engine/collision');
-const StateMachine = require('../cat/state-machine');
 const CatSprite = require('../cat/sprite');
 const CatBehaviors = require('../cat/behaviors');
 const TodoManager = require('../features/todo');
@@ -26,7 +25,6 @@ const canvasManager = new CanvasManager(canvas);
 const collisionSystem = new CollisionSystem(canvas.width, canvas.height);
 const catSprite = new CatSprite(canvas.width / 2, canvas.height - 100);
 const catBehaviors = new CatBehaviors(catSprite, collisionSystem);
-const stateMachine = new StateMachine();
 const animationEngine = new AnimationEngine();
 const todoManager = new TodoManager(path.join(__dirname, '../../data/todos.json'));
 const systemMonitor = new SystemMonitor();
@@ -136,13 +134,13 @@ catLayer.elements.push({
   }
 });
 
-// 配置状态机
-stateMachine.addState('idle', {
+// 配置状态机（使用 CatSprite 内部的状态机）
+catSprite.stateMachine.addState('idle', {
   onEnter: () => catBehaviors.idle(),
   onUpdate: (dt) => {}
 });
 
-stateMachine.addState('walk', {
+catSprite.stateMachine.addState('walk', {
   onEnter: () => {
     const targetX = Math.random() * canvas.width;
     const targetY = Math.random() * canvas.height;
@@ -151,12 +149,12 @@ stateMachine.addState('walk', {
   onUpdate: (dt) => catBehaviors.update(dt)
 });
 
-stateMachine.addState('sleep', {
+catSprite.stateMachine.addState('sleep', {
   onEnter: () => catBehaviors.sleep(),
   onUpdate: (dt) => {}
 });
 
-stateMachine.addState('interact', {
+catSprite.stateMachine.addState('interact', {
   onEnter: () => catBehaviors.interact(),
   onExit: () => {},
   onUpdate: (dt) => {
@@ -165,14 +163,14 @@ stateMachine.addState('interact', {
 });
 
 // 初始状态为空闲
-stateMachine.transition('idle');
+catSprite.setState('idle');
 
 // 定时随机切换状态
 setInterval(() => {
-  if (stateMachine.currentState === 'idle') {
+  if (catSprite.stateMachine.currentState === 'idle') {
     const actions = ['walk', 'sleep', 'idle'];
     const action = actions[Math.floor(Math.random() * actions.length)];
-    stateMachine.transition(action);
+    catSprite.setState(action);
   }
 }, 5000);
 
@@ -190,7 +188,14 @@ systemMonitor.start();
 
 // 游戏循环
 let lastTime = 0;
+let isFirstFrame = true;
+
 function gameLoop(timestamp) {
+  if (isFirstFrame) {
+    lastTime = timestamp;
+    isFirstFrame = false;
+  }
+
   const deltaTime = timestamp - lastTime;
   lastTime = timestamp;
 
@@ -198,7 +203,6 @@ function gameLoop(timestamp) {
   collisionSystem.width = canvas.width;
   collisionSystem.height = canvas.height;
 
-  stateMachine.update(deltaTime);
   catSprite.update(deltaTime);
   animationEngine.update(deltaTime);
   canvasManager.render();
@@ -216,14 +220,14 @@ canvas.addEventListener('click', (e) => {
 
   // 检测是否点击到猫咪
   if (Math.abs(x - catSprite.x) < 50 && Math.abs(y - catSprite.y) < 50) {
-    stateMachine.transition('interact');
+    catSprite.setState('interact');
     const messages = ['喵~', '呼噜噜~', '摸摸头~', '开心！', '再摸摸！'];
     const msg = messages[Math.floor(Math.random() * messages.length)];
     bubble.show(msg, catSprite.x, catSprite.y - 70);
 
     // 2秒后回到空闲状态
     setTimeout(() => {
-      stateMachine.transition('idle');
+      catSprite.setState('idle');
     }, 2000);
   }
 });
@@ -235,9 +239,9 @@ canvas.addEventListener('contextmenu', (e) => {
     {
       label: '摸摸头',
       action: () => {
-        stateMachine.transition('interact');
+        catSprite.setState('interact');
         bubble.show('呼噜噜~', catSprite.x, catSprite.y - 70);
-        setTimeout(() => stateMachine.transition('idle'), 2000);
+        setTimeout(() => catSprite.setState('idle'), 2000);
       }
     },
     {
@@ -264,14 +268,14 @@ canvas.addEventListener('contextmenu', (e) => {
     {
       label: '睡觉',
       action: () => {
-        stateMachine.transition('sleep');
+        catSprite.setState('sleep');
         bubble.show('晚安~', catSprite.x, catSprite.y - 70);
       }
     },
     {
       label: '走走',
       action: () => {
-        stateMachine.transition('walk');
+        catSprite.setState('walk');
       }
     }
   ]);
