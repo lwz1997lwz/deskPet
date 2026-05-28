@@ -6,7 +6,7 @@ class CatSprite {
     this.y = y;
     this.width = 64;
     this.height = 64;
-    this.speed = 2;
+    this.speed = 80; // 像素/秒
     this.direction = 1;
     this.state = 'idle';
     this.images = {};

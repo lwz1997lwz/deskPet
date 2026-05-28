@@ -9,8 +9,6 @@ class ContextMenu {
 
     this.element = document.createElement('div');
     this.element.className = 'context-menu';
-    this.element.style.left = x + 'px';
-    this.element.style.top = y + 'px';
 
     items.forEach(item => {
       const menuItem = document.createElement('div');
@@ -24,6 +22,13 @@ class ContextMenu {
     });
 
     document.body.appendChild(this.element);
+
+    // 边界检测：超出窗口时翻转方向
+    const rect = this.element.getBoundingClientRect();
+    const maxX = window.innerWidth - rect.width - 4;
+    const maxY = window.innerHeight - rect.height - 4;
+    this.element.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+    this.element.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
 
     setTimeout(() => {
       document.addEventListener('click', this.hide.bind(this), { once: true });

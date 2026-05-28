@@ -39,8 +39,9 @@ class CatBehaviors {
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance > 5) {
-        this.sprite.x += (dx / distance) * this.sprite.speed * deltaTime;
-        this.sprite.y += (dy / distance) * this.sprite.speed * deltaTime;
+        const dt = deltaTime / 1000; // 毫秒转秒
+        this.sprite.x += (dx / distance) * this.sprite.speed * dt;
+        this.sprite.y += (dy / distance) * this.sprite.speed * dt;
         this.sprite.direction = dx > 0 ? 1 : -1;
       } else {
         this.targetX = null;

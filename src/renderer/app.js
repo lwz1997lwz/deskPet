@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const url = require('url');
 const { ipcRenderer } = require('electron');
 const CanvasManager = require('../engine/canvas');
 const AnimationEngine = require('../engine/animation');
@@ -66,7 +67,7 @@ const spriteAnimator = {
 
       for (const file of files) {
         const filePath = path.join(statePath, file);
-        const fileUrl = 'file:///' + filePath.replace(/\\/g, '/');
+        const fileUrl = url.pathToFileURL(filePath).href;
         const img = new Image();
         img.src = fileUrl;
         await new Promise(resolve => {

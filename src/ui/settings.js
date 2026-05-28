@@ -1,9 +1,18 @@
 // src/ui/settings.js
-const Store = require('electron-store');
+const fs = require('fs');
+const path = require('path');
+
+const DATA_DIR = path.join(__dirname, '../../data');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+const DEFAULTS = {
+  autoLaunch: false,
+  soundEnabled: true,
+  opacity: 100
+};
 
 class Settings {
   constructor() {
-    this.store = new Store({ name: 'settings' });
     this.element = null;
     this.isOpen = false;
   }
@@ -71,18 +80,28 @@ class Settings {
       opacity: parseInt(this.element.querySelector('#opacity').value)
     };
 
-    this.store.set('settings', settings);
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    } catch (e) {
+      console.error('保存设置失败:', e);
+    }
     this.close();
 
     return settings;
   }
 
   load() {
-    return this.store.get('settings', {
-      autoLaunch: false,
-      soundEnabled: true,
-      opacity: 100
-    });
+    try {
+      if (fs.existsSync(SETTINGS_FILE)) {
+        return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+      }
+    } catch (e) {
+      console.error('加载设置失败:', e);
+    }
+    return { ...DEFAULTS };
   }
 }
 
