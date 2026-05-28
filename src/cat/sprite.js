@@ -8,6 +8,7 @@ class CatSprite {
     this.height = 64;
     this.speed = 80; // 像素/秒
     this.direction = 1;
+    this.visualDirection = 1; // 平滑过渡的方向值
     this.state = 'idle';
     this.images = {};
     this.currentImage = null;
@@ -32,6 +33,9 @@ class CatSprite {
 
   update(deltaTime) {
     this.stateMachine.update(deltaTime);
+    // 平滑方向插值（约 150ms 完成翻转）
+    const lerpSpeed = 1 - Math.pow(0.001, deltaTime / 1000);
+    this.visualDirection += (this.direction - this.visualDirection) * lerpSpeed;
   }
 
   render(ctx) {

@@ -5,6 +5,7 @@ class TodoManager {
   constructor(dataPath) {
     this.dataPath = dataPath;
     this.todos = this.load();
+    this.nextId = this.todos.length > 0 ? Math.max(...this.todos.map(t => t.id)) + 1 : 1;
   }
 
   load() {
@@ -24,7 +25,7 @@ class TodoManager {
 
   add(content, reminderTime = null) {
     const todo = {
-      id: Date.now(),
+      id: this.nextId++,
       content,
       reminderTime,
       completed: false,

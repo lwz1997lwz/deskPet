@@ -83,6 +83,24 @@ describe('StateMachine', () => {
       expect(walkOnExit).toHaveBeenCalledTimes(1);
       expect(runOnEnter).toHaveBeenCalledTimes(1);
     });
+
+    test('应该防止递归转换', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const walkOnEnter = jest.fn(() => {
+        // 在 onEnter 中尝试递归转换
+        sm.transition('idle');
+      });
+      sm.addState('idle', { onEnter: jest.fn() });
+      sm.addState('walk', { onEnter: walkOnEnter });
+
+      sm.transition('walk');
+
+      expect(sm.currentState).toBe('walk');
+      expect(walkOnEnter).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalledWith('状态机正在转换中，忽略新的转换请求:', 'idle');
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('update', () => {

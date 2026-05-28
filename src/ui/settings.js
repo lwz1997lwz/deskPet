@@ -8,13 +8,15 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const DEFAULTS = {
   autoLaunch: false,
   soundEnabled: true,
-  opacity: 100
+  opacity: 100,
+  catSpeed: 80
 };
 
 class Settings {
   constructor() {
     this.element = null;
     this.isOpen = false;
+    this.onSave = null;
   }
 
   open() {
@@ -44,6 +46,11 @@ class Settings {
           <input type="range" id="opacity" min="30" max="100" value="${settings.opacity || 100}">
           <span class="opacity-value">${settings.opacity || 100}%</span>
         </div>
+        <div class="setting-item">
+          <label>移动速度</label>
+          <input type="range" id="catSpeed" min="20" max="200" value="${settings.catSpeed || 80}">
+          <span class="catSpeed-value">${settings.catSpeed || 80}</span>
+        </div>
       </div>
       <div class="settings-footer">
         <button class="save-btn">保存</button>
@@ -59,6 +66,12 @@ class Settings {
     const opacityValue = this.element.querySelector('.opacity-value');
     opacityInput.oninput = () => {
       opacityValue.textContent = opacityInput.value + '%';
+    };
+
+    const speedInput = this.element.querySelector('#catSpeed');
+    const speedValue = this.element.querySelector('.catSpeed-value');
+    speedInput.oninput = () => {
+      speedValue.textContent = speedInput.value;
     };
 
     document.body.appendChild(this.element);
@@ -77,7 +90,8 @@ class Settings {
     const settings = {
       autoLaunch: this.element.querySelector('#autoLaunch').checked,
       soundEnabled: this.element.querySelector('#soundEnabled').checked,
-      opacity: parseInt(this.element.querySelector('#opacity').value)
+      opacity: parseInt(this.element.querySelector('#opacity').value),
+      catSpeed: parseInt(this.element.querySelector('#catSpeed').value)
     };
 
     try {
@@ -89,6 +103,10 @@ class Settings {
       console.error('保存设置失败:', e);
     }
     this.close();
+
+    if (this.onSave) {
+      this.onSave(settings);
+    }
 
     return settings;
   }

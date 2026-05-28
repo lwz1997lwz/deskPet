@@ -45,6 +45,15 @@ const bubble = new Bubble();
 const contextMenu = new ContextMenu();
 const settings = new Settings();
 
+// 从设置中加载猫咪速度
+const savedSettings = settings.load();
+catSprite.speed = savedSettings.catSpeed || 80;
+
+// 保存设置时同步更新速度
+settings.onSave = (newSettings) => {
+  catSprite.speed = newSettings.catSpeed || 80;
+};
+
 // 精灵图动画系统
 const spriteAnimator = {
   frames: {},
@@ -101,8 +110,8 @@ const spriteAnimator = {
     }
 
     this.frameTimer += deltaTime;
-    if (this.frameTimer >= this.frameInterval) {
-      this.frameTimer = 0;
+    while (this.frameTimer >= this.frameInterval) {
+      this.frameTimer -= this.frameInterval;
       const stateFrames = this.frames[catSprite.state];
       if (stateFrames && stateFrames.length > 0) {
         this.currentFrame = (this.currentFrame + 1) % stateFrames.length;
@@ -133,7 +142,7 @@ function gameLoop(timestamp) {
       console.log('游戏循环已启动');
     }
 
-    const deltaTime = timestamp - lastTime;
+    const deltaTime = Math.min(timestamp - lastTime, 100); // 上限 100ms，防止切标签后瞬移
     lastTime = timestamp;
 
     // 更新碰撞系统边界（窗口可能已调整大小）
@@ -179,8 +188,8 @@ catLayer.elements.push({
     if (frame && frame.width && frame.height) {
       ctx.save();
 
-      // 根据方向翻转图片
-      if (catSprite.direction === -1) {
+      // 根据方向翻转图片（使用平滑过渡的方向值）
+      if (catSprite.visualDirection < 0) {
         ctx.translate(catSprite.x, catSprite.y);
         ctx.scale(-1, 1);
         ctx.drawImage(frame, -frame.width / 2, -frame.height / 2);
@@ -246,13 +255,19 @@ catSprite.stateMachine.addState('interact', {
 catSprite.setState('idle');
 
 // 定时随机切换状态
-setInterval(() => {
+const stateChangeInterval = setInterval(() => {
   if (catSprite.stateMachine.currentState === 'idle') {
     const actions = ['walk', 'sleep', 'idle'];
     const action = actions[Math.floor(Math.random() * actions.length)];
     catSprite.setState(action);
   }
 }, 5000);
+
+// 页面卸载时清理定时器，防止内存泄漏
+window.addEventListener('beforeunload', () => {
+  clearInterval(stateChangeInterval);
+  systemMonitor.stop();
+});
 
 // 初始化系统监控
 systemMonitor.onUpdate((data) => {
@@ -365,7 +380,11 @@ canvas.addEventListener('contextmenu', (e) => {
       action: () => {
         catSprite.setState('interact');
         bubble.show('呼噜噜~', catSprite.x, catSprite.y - 70);
-        setTimeout(() => catSprite.setState('idle'), 2000);
+        setTimeout(() => {
+          if (catSprite.state === 'interact') {
+            catSprite.setState('idle');
+          }
+        }, 2000);
       }
     },
     {
@@ -436,11 +455,13 @@ function checkTodoReminders() {
     }
   }
   // 清理已完成或已删除的 todo id
+  const idsToRemove = [];
   for (const id of notifiedTodoIds) {
     if (!todoManager.todos.find(t => t.id === id && !t.completed)) {
-      notifiedTodoIds.delete(id);
+      idsToRemove.push(id);
     }
   }
+  idsToRemove.forEach(id => notifiedTodoIds.delete(id));
 }
 
 console.log('桌面猫咪已启动！');
